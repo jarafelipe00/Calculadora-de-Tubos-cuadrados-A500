@@ -1,432 +1,746 @@
-import math
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import json
+import math
+import io
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Tuple
 
-# 1. Configuración de la página
+# ==============================================================================
+# 1. BASE DE DATOS TÉCNICA EMBEBIDA (CATÁLOGOS PROPORCIONADOS)
+# ==============================================================================
+# Datos exactos extraídos de Aceros Arequipa y normas ASTM A36 / A500 / A572 / SAE 1045
+CATALOGO_OFICIAL = {
+    "Tubo Rectangular LAC": [
+        {"denominacion": "20 x 40 x 1.5 mm", "A": 40.0, "B": 20.0, "e": 1.5, "peso_kg_m": 1.35, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "20 x 40 x 2.0 mm", "A": 40.0, "B": 20.0, "e": 2.0, "peso_kg_m": 1.70, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "20 x 50 x 2.0 mm", "A": 50.0, "B": 20.0, "e": 2.0, "peso_kg_m": 2.10, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 1.2 mm", "A": 50.0, "B": 25.0, "e": 1.2, "peso_kg_m": 1.34, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 1.5 mm", "A": 50.0, "B": 25.0, "e": 1.5, "peso_kg_m": 1.65, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 1.8 mm", "A": 50.0, "B": 25.0, "e": 1.8, "peso_kg_m": 2.07, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 2.0 mm", "A": 50.0, "B": 25.0, "e": 2.0, "peso_kg_m": 2.26, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 2.5 mm", "A": 50.0, "B": 25.0, "e": 2.5, "peso_kg_m": 2.98, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 50 x 3.0 mm", "A": 50.0, "B": 25.0, "e": 3.0, "peso_kg_m": 3.35, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 50 x 2.0 mm", "A": 50.0, "B": 40.0, "e": 2.0, "peso_kg_m": 2.62, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 60 x 2.0 mm", "A": 60.0, "B": 40.0, "e": 2.0, "peso_kg_m": 3.03, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 60 x 2.5 mm", "A": 60.0, "B": 40.0, "e": 2.5, "peso_kg_m": 3.60, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 60 x 3.0 mm", "A": 60.0, "B": 40.0, "e": 3.0, "peso_kg_m": 4.25, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 80 x 2.0 mm", "A": 80.0, "B": 40.0, "e": 2.0, "peso_kg_m": 3.66, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 80 x 3.0 mm", "A": 80.0, "B": 40.0, "e": 3.0, "peso_kg_m": 5.19, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 70 x 2.0 mm", "A": 70.0, "B": 50.0, "e": 2.0, "peso_kg_m": 3.58, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 75 x 2.0 mm", "A": 75.0, "B": 50.0, "e": 2.0, "peso_kg_m": 3.95, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 75 x 3.0 mm", "A": 75.0, "B": 50.0, "e": 3.0, "peso_kg_m": 5.42, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 100 x 2.0 mm", "A": 100.0, "B": 50.0, "e": 2.0, "peso_kg_m": 4.50, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 100 x 3.0 mm", "A": 100.0, "B": 50.0, "e": 3.0, "peso_kg_m": 6.85, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 100 x 4.0 mm", "A": 100.0, "B": 50.0, "e": 4.0, "peso_kg_m": 8.59, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 150 x 3.0 mm", "A": 150.0, "B": 50.0, "e": 3.0, "peso_kg_m": 9.17, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 200 x 3.0 mm", "A": 200.0, "B": 50.0, "e": 3.0, "peso_kg_m": 11.75, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "75 x 100 x 3.0 mm", "A": 100.0, "B": 75.0, "e": 3.0, "peso_kg_m": 8.16, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "100 x 150 x 3.0 mm", "A": 150.0, "B": 100.0, "e": 3.0, "peso_kg_m": 11.56, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "100 x 200 x 4.0 mm", "A": 200.0, "B": 100.0, "e": 4.0, "peso_kg_m": 18.45, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"}
+    ],
+    "Tubo Cuadrado LAC": [
+        {"denominacion": "20 x 20 x 0.9 mm", "A": 20.0, "B": 20.0, "e": 0.9, "peso_kg_m": 0.49, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "20 x 20 x 1.5 mm", "A": 20.0, "B": 20.0, "e": 1.5, "peso_kg_m": 0.86, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "20 x 20 x 2.0 mm", "A": 20.0, "B": 20.0, "e": 2.0, "peso_kg_m": 1.04, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 25 x 1.5 mm", "A": 25.0, "B": 25.0, "e": 1.5, "peso_kg_m": 1.06, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 25 x 2.0 mm", "A": 25.0, "B": 25.0, "e": 2.0, "peso_kg_m": 1.46, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "25 x 25 x 3.0 mm", "A": 25.0, "B": 25.0, "e": 3.0, "peso_kg_m": 1.93, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "30 x 30 x 2.0 mm", "A": 30.0, "B": 30.0, "e": 2.0, "peso_kg_m": 1.86, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 40 x 2.0 mm", "A": 40.0, "B": 40.0, "e": 2.0, "peso_kg_m": 2.24, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "40 x 40 x 3.0 mm", "A": 40.0, "B": 40.0, "e": 3.0, "peso_kg_m": 3.54, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 50 x 2.0 mm", "A": 50.0, "B": 50.0, "e": 2.0, "peso_kg_m": 3.12, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 50 x 3.0 mm", "A": 50.0, "B": 50.0, "e": 3.0, "peso_kg_m": 4.49, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "50 x 50 x 4.0 mm", "A": 50.0, "B": 50.0, "e": 4.0, "peso_kg_m": 6.57, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "60 x 60 x 2.0 mm", "A": 60.0, "B": 60.0, "e": 2.0, "peso_kg_m": 3.56, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "75 x 75 x 2.0 mm", "A": 75.0, "B": 75.0, "e": 2.0, "peso_kg_m": 4.50, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "75 x 75 x 3.0 mm", "A": 75.0, "B": 75.0, "e": 3.0, "peso_kg_m": 6.81, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "100 x 100 x 3.0 mm", "A": 100.0, "B": 100.0, "e": 3.0, "peso_kg_m": 9.20, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "100 x 100 x 4.0 mm", "A": 100.0, "B": 100.0, "e": 4.0, "peso_kg_m": 12.17, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "125 x 125 x 4.0 mm", "A": 125.0, "B": 125.0, "e": 4.0, "peso_kg_m": 14.87, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "150 x 150 x 4.0 mm", "A": 150.0, "B": 150.0, "e": 4.0, "peso_kg_m": 18.01, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"},
+        {"denominacion": "200 x 200 x 6.0 mm", "A": 200.0, "B": 200.0, "e": 6.0, "peso_kg_m": 35.82, "longitudes": [6.0], "norma": "ASTM A500 Gr. A"}
+    ],
+    "Viga Estructural W (Perfil H)": [
+        {"denominacion": "W 4\" x 4\" x 13.0 lb/pie", "A": 106.0, "B": 103.0, "ta": 7.11, "tb": 8.76, "peso_kg_m": 19.39, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 6\" x 4\" x 9.0 lb/pie", "A": 150.0, "B": 100.0, "ta": 4.32, "tb": 5.46, "peso_kg_m": 13.42, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 6\" x 4\" x 12.0 lb/pie", "A": 153.0, "B": 102.0, "ta": 5.84, "tb": 7.11, "peso_kg_m": 17.90, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 6\" x 6\" x 15.0 lb/pie", "A": 152.0, "B": 152.0, "ta": 5.84, "tb": 6.60, "peso_kg_m": 22.37, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 6\" x 6\" x 20.0 lb/pie", "A": 157.0, "B": 153.0, "ta": 6.60, "tb": 9.27, "peso_kg_m": 29.83, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 8\" x 4\" x 10.0 lb/pie", "A": 200.0, "B": 100.0, "ta": 4.32, "tb": 5.21, "peso_kg_m": 14.91, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 8\" x 4\" x 13.0 lb/pie", "A": 203.0, "B": 102.0, "ta": 5.84, "tb": 8.38, "peso_kg_m": 19.39, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 8\" x 5 1/4\" x 18.0 lb/pie", "A": 207.0, "B": 133.0, "ta": 5.84, "tb": 8.38, "peso_kg_m": 26.84, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 8\" x 8\" x 31.0 lb/pie", "A": 203.0, "B": 203.0, "ta": 7.24, "tb": 11.05, "peso_kg_m": 46.23, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 10\" x 4\" x 15.0 lb/pie", "A": 254.0, "B": 102.0, "ta": 5.84, "tb": 6.86, "peso_kg_m": 22.37, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 10\" x 5 3/4\" x 22.0 lb/pie", "A": 258.0, "B": 146.0, "ta": 6.10, "tb": 9.14, "peso_kg_m": 32.81, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 12\" x 4\" x 19.0 lb/pie", "A": 309.0, "B": 102.0, "ta": 5.97, "tb": 8.89, "peso_kg_m": 28.33, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"},
+        {"denominacion": "W 12\" x 6 1/2\" x 26.0 lb/pie", "A": 310.0, "B": 165.0, "ta": 5.84, "tb": 9.65, "peso_kg_m": 38.77, "longitudes": [6.0, 9.0, 12.0], "norma": "ASTM A36"}
+    ],
+    "Canal C": [
+        {"denominacion": "C 2\" x 2.58 lb/pie", "A": 50.8, "B": 25.4, "tw": 4.75, "tf": 4.75, "peso_kg_m": round(2.58 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "C 3\" x 4.10 lb/pie", "A": 76.2, "B": 35.8, "tw": 4.32, "tf": 6.93, "peso_kg_m": round(4.10 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 3\" x 5.00 lb/pie", "A": 76.2, "B": 38.1, "tw": 6.55, "tf": 6.93, "peso_kg_m": round(5.00 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 4\" x 5.40 lb/pie", "A": 101.6, "B": 40.1, "tw": 4.67, "tf": 7.52, "peso_kg_m": round(5.40 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 4\" x 7.25 lb/pie", "A": 101.6, "B": 43.7, "tw": 8.15, "tf": 7.52, "peso_kg_m": round(7.25 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 6\" x 8.20 lb/pie", "A": 152.4, "B": 48.8, "tw": 5.08, "tf": 8.71, "peso_kg_m": round(8.20 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 6\" x 10.50 lb/pie", "A": 152.4, "B": 51.6, "tw": 7.98, "tf": 8.71, "peso_kg_m": round(10.50 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"},
+        {"denominacion": "C 8\" x 11.50 lb/pie", "A": 203.2, "B": 57.4, "tw": 5.59, "tf": 9.91, "peso_kg_m": round(11.50 * 1.48816, 2), "longitudes": [6.0], "norma": "ASTM A36/A572-G50"}
+    ],
+    "Perfil TEE": [
+        {"denominacion": "T 20 x 20 x 3.0 mm", "A": 20.0, "B": 20.0, "e": 3.0, "peso_kg_m": 0.88, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "T 25 x 25 x 3.0 mm", "A": 25.0, "B": 25.0, "e": 3.0, "peso_kg_m": 1.10, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "T 1 1/4\" x 1 1/4\" x 1/8\"", "A": 31.75, "B": 31.75, "e": 3.18, "peso_kg_m": 1.54, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "T 1 1/2\" x 1 1/2\" x 1/8\"", "A": 38.1, "B": 38.1, "e": 3.18, "peso_kg_m": 1.84, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "T 1 1/2\" x 1 1/2\" x 3/16\"", "A": 38.1, "B": 38.1, "e": 4.76, "peso_kg_m": 2.72, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "T 2\" x 2\" x 1/4\"", "A": 50.8, "B": 50.8, "e": 6.35, "peso_kg_m": 4.97, "longitudes": [6.0], "norma": "ASTM A36"}
+    ],
+    "Platina de Acero": [
+        {"denominacion": "PL 1/8\" x 1/2\" (3.0 x 12 mm)", "A": 12.0, "B": 0.0, "e": 3.0, "peso_kg_m": round(1.92 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/8\" x 3/4\" (3.0 x 19 mm)", "A": 19.0, "B": 0.0, "e": 3.0, "peso_kg_m": round(2.88 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/8\" x 1\" (3.0 x 25 mm)", "A": 25.0, "B": 0.0, "e": 3.0, "peso_kg_m": round(3.84 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 3/16\" x 1\" (4.5 x 25 mm)", "A": 25.0, "B": 0.0, "e": 4.5, "peso_kg_m": round(5.88 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 3/16\" x 1 1/2\" (4.5 x 38 mm)", "A": 38.0, "B": 0.0, "e": 4.5, "peso_kg_m": round(8.52 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 3/16\" x 2\" (4.5 x 50 mm)", "A": 50.0, "B": 0.0, "e": 4.5, "peso_kg_m": round(11.40 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/4\" x 1\" (6.0 x 25 mm)", "A": 25.0, "B": 0.0, "e": 6.0, "peso_kg_m": round(7.68 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/4\" x 2\" (6.0 x 50 mm)", "A": 50.0, "B": 0.0, "e": 6.0, "peso_kg_m": round(15.18 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/4\" x 3\" (6.0 x 75 mm)", "A": 75.0, "B": 0.0, "e": 6.0, "peso_kg_m": round(22.80 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/4\" x 4\" (6.0 x 100 mm)", "A": 100.0, "B": 0.0, "e": 6.0, "peso_kg_m": round(30.36 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 3/8\" x 2\" (9.5 x 50 mm)", "A": 50.0, "B": 0.0, "e": 9.5, "peso_kg_m": round(22.80 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "PL 1/2\" x 4\" (12.0 x 100 mm)", "A": 100.0, "B": 0.0, "e": 12.0, "peso_kg_m": round(60.78 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"}
+    ],
+    "Ángulo L de Alas Iguales": [
+        {"denominacion": "L 19 x 19 x 2.0 mm (3/4\" x 5/64\")", "A": 19.0, "B": 19.0, "e": 2.0, "peso_kg_m": round(3.582 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 25 x 25 x 3.0 mm (1\" x 1/8\")", "A": 25.0, "B": 25.0, "e": 3.0, "peso_kg_m": round(7.143 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 25 x 25 x 4.5 mm (1\" x 3/16\")", "A": 25.0, "B": 25.0, "e": 4.5, "peso_kg_m": round(10.358 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 38 x 38 x 3.0 mm (1 1/2\" x 1/8\")", "A": 38.0, "B": 38.0, "e": 3.0, "peso_kg_m": round(10.983 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 38 x 38 x 4.5 mm (1 1/2\" x 3/16\")", "A": 38.0, "B": 38.0, "e": 4.5, "peso_kg_m": round(16.072 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 50 x 50 x 3.0 mm (2\" x 1/8\")", "A": 50.0, "B": 50.0, "e": 3.0, "peso_kg_m": round(14.733 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 50 x 50 x 4.5 mm (2\" x 3/16\")", "A": 50.0, "B": 50.0, "e": 4.5, "peso_kg_m": round(21.787 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 50 x 50 x 6.0 mm (2\" x 1/4\")", "A": 50.0, "B": 50.0, "e": 6.0, "peso_kg_m": round(28.483 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 63 x 63 x 6.0 mm (2 1/2\" x 1/4\")", "A": 63.0, "B": 63.0, "e": 6.0, "peso_kg_m": round(36.609 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 75 x 75 x 6.0 mm (3\" x 1/4\")", "A": 75.0, "B": 75.0, "e": 6.0, "peso_kg_m": round(42.752 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "L 100 x 100 x 6.0 mm (4\" x 1/4\")", "A": 100.0, "B": 100.0, "e": 6.0, "peso_kg_m": round(58.932 / 6.0, 3), "longitudes": [6.0], "norma": "ASTM A36"}
+    ],
+    "Barra Redonda Maciza (Eje)": [
+        {"denominacion": "Redondo 1/4\" (6.0 mm)", "A": 6.0, "B": 0.0, "e": 0.0, "peso_kg_m": 0.222, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 3/8\" (10.0 mm)", "A": 10.0, "B": 0.0, "e": 0.0, "peso_kg_m": 0.559, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 1/2\" (12.0 mm)", "A": 12.0, "B": 0.0, "e": 0.0, "peso_kg_m": 0.994, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 5/8\" (15.0 mm)", "A": 15.0, "B": 0.0, "e": 0.0, "peso_kg_m": 1.554, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 3/4\" (18.0 mm)", "A": 18.0, "B": 0.0, "e": 0.0, "peso_kg_m": 2.237, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 7/8\" (22.0 mm)", "A": 22.0, "B": 0.0, "e": 0.0, "peso_kg_m": 3.045, "longitudes": [6.0], "norma": "ASTM A36"},
+        {"denominacion": "Redondo 1\" (25.4 mm)", "A": 25.4, "B": 0.0, "e": 0.0, "peso_kg_m": 3.978, "longitudes": [6.0], "norma": "ASTM A36 / SAE 1045"},
+        {"denominacion": "Redondo 1 1/4\" (31.75 mm)", "A": 31.75, "B": 0.0, "e": 0.0, "peso_kg_m": 6.215, "longitudes": [6.0], "norma": "ASTM A36 / SAE 1045"},
+        {"denominacion": "Redondo 1 1/2\" (38.1 mm)", "A": 38.1, "B": 0.0, "e": 0.0, "peso_kg_m": 8.947, "longitudes": [6.0], "norma": "ASTM A36 / SAE 1045"},
+        {"denominacion": "Redondo 2\" (50.8 mm)", "A": 50.8, "B": 0.0, "e": 0.0, "peso_kg_m": 15.911, "longitudes": [6.0], "norma": "ASTM A36 / SAE 1045"}
+    ]
+}
+
+# ==============================================================================
+# 2. MODELOS MATEMÁTICOS DE SUPERFICIE EXPUESTA
+# ==============================================================================
+def calcular_perimetro_superficial(familia: str, A: float, B: float, e: float) -> float:
+    """
+    Retorna el perímetro expuesto exterior en metros lineales (m2/m).
+    A, B, e en milímetros.
+    """
+    if familia in ["Tubo Rectangular LAC", "Tubo Cuadrado LAC"]:
+        return round((2.0 * (A + B)) / 1000.0, 4)
+    elif familia == "Barra Redonda Maciza (Eje)":
+        return round((math.pi * A) / 1000.0, 4)
+    elif familia == "Platina de Acero":
+        return round((2.0 * (A + e)) / 1000.0, 4)
+    elif familia == "Ángulo L de Alas Iguales":
+        return round((2.0 * (A + B)) / 1000.0, 4)
+    elif familia in ["Canal C", "Viga Estructural W (Perfil H)"]:
+        return round((2.0 * A + 4.0 * B) / 1000.0, 4)
+    elif familia == "Perfil TEE":
+        return round((2.0 * A + 2.0 * B) / 1000.0, 4)
+    return 0.0
+
+# ==============================================================================
+# 3. MOTOR DE OPTIMIZACIÓN 1D (CUTTING STOCK PROBLEM)
+# ==============================================================================
+@dataclass
+class PiezaCorte:
+    id_partida: str
+    descripcion: str
+    longitud: float
+
+@dataclass
+class BarraResultado:
+    id_barra: str
+    tipo_origen: str  # 'COMERCIAL' o 'RETAZO'
+    longitud_nominal: float
+    piezas: List[PiezaCorte] = field(default_factory=list)
+    num_cortes: int = 0
+    perdida_corte_m: float = 0.0
+    longitud_util_m: float = 0.0
+    longitud_sobrante_m: float = 0.0
+    es_retazo_utilizable: bool = False
+    rendimiento_pct: float = 0.0
+
+def optimizar_1d_cutting_stock(
+    demandas: List[Tuple[str, str, float, int]], # (id_partida, desc, long_m, cant)
+    longitudes_comerciales: List[float],
+    retazos_inventario: List[Dict[str, Any]],
+    kerf_m: float = 0.003,
+    despunte_m: float = 0.0,
+    min_retazo_m: float = 0.50,
+    modo: str = "Minimizar Desperdicio"
+) -> Dict[str, Any]:
+    
+    # 1. Expandir lista de piezas demandadas
+    piezas_solicitadas: List[PiezaCorte] = []
+    for partida_id, desc, l_m, cant in demandas:
+        for _ in range(cant):
+            piezas_solicitadas.append(PiezaCorte(partida_id, desc, round(l_m, 4)))
+    
+    # Ordenamiento heurístico First-Fit / Best-Fit Decreasing
+    piezas_solicitadas.sort(key=lambda p: p.longitud, reverse=True)
+    
+    barras_procesadas: List[BarraResultado] = []
+    retazos_consumidos_ids = []
+    contador_barras = 1
+
+    # 2. Prioridad de Retazos en Inventario (Best-Fit)
+    retazos_disponibles = sorted(
+        [r for r in retazos_inventario if r["estado"] == "Disponible"],
+        key=lambda x: x["longitud_m"]
+    )
+
+    for ret in retazos_disponibles:
+        if not piezas_solicitadas:
+            break
+        
+        capacidad = ret["longitud_m"] - despunte_m
+        piezas_asignadas = []
+        long_acumulada = 0.0
+        restantes = []
+
+        for pieza in piezas_solicitadas:
+            costo_adicional = kerf_m if len(piezas_asignadas) > 0 else 0.0
+            if (long_acumulada + pieza.longitud + costo_adicional) <= (capacidad + 1e-6):
+                piezas_asignadas.append(pieza)
+                long_acumulada += pieza.longitud + costo_adicional
+            else:
+                restantes.append(pieza)
+
+        if piezas_asignadas:
+            piezas_solicitadas = restantes
+            n_c = len(piezas_asignadas)
+            perdida = (n_c - 1) * kerf_m + despunte_m if n_c > 0 else 0.0
+            util = sum(p.longitud for p in piezas_asignadas)
+            sobrante = round(ret["longitud_m"] - (util + perdida), 4)
+            reutilizable = sobrante >= min_retazo_m
+            rend = round((util / ret["longitud_m"]) * 100.0, 2)
+
+            barras_procesadas.append(BarraResultado(
+                id_barra=f"RET-{ret['id']:03d}",
+                tipo_origen="RETAZO",
+                longitud_nominal=ret["longitud_m"],
+                piezas=piezas_asignadas,
+                num_cortes=n_c,
+                perdida_corte_m=round(perdida, 4),
+                longitud_util_m=round(util, 4),
+                longitud_sobrante_m=max(0.0, sobrante),
+                es_retazo_utilizable=reutilizable,
+                rendimiento_pct=rend
+            ))
+            retazos_consumidos_ids.append(ret["id"])
+
+    # 3. Asignación a Barras Comerciales
+    long_comercial_base = min(longitudes_comerciales) if longitudes_comerciales else 6.0
+    
+    while piezas_solicitadas:
+        capacidad = long_comercial_base - despunte_m
+        piezas_asignadas = []
+        long_acumulada = 0.0
+        restantes = []
+
+        for pieza in piezas_solicitadas:
+            costo_adicional = kerf_m if len(piezas_asignadas) > 0 else 0.0
+            if (long_acumulada + pieza.longitud + costo_adicional) <= (capacidad + 1e-6):
+                piezas_asignadas.append(pieza)
+                long_acumulada += pieza.longitud + costo_adicional
+            else:
+                restantes.append(pieza)
+
+        piezas_solicitadas = restantes
+        n_c = len(piezas_asignadas)
+        perdida = (n_c - 1) * kerf_m + despunte_m if n_c > 0 else 0.0
+        util = sum(p.longitud for p in piezas_asignadas)
+        sobrante = round(long_comercial_base - (util + perdida), 4)
+        reutilizable = sobrante >= min_retazo_m
+        rend = round((util / long_comercial_base) * 100.0, 2)
+
+        barras_procesadas.append(BarraResultado(
+            id_barra=f"B-{contador_barras:03d}",
+            tipo_origen="COMERCIAL",
+            longitud_nominal=long_comercial_base,
+            piezas=piezas_asignadas,
+            num_cortes=n_c,
+            perdida_corte_m=round(perdida, 4),
+            longitud_util_m=round(util, 4),
+            longitud_sobrante_m=max(0.0, sobrante),
+            es_retazo_utilizable=reutilizable,
+            rendimiento_pct=rend
+        ))
+        contador_barras += 1
+
+    # Totales y Balances
+    tot_comprado = sum(b.longitud_nominal for b in barras_procesadas if b.tipo_origen == "COMERCIAL")
+    tot_util = sum(b.longitud_util_m for b in barras_procesadas)
+    tot_perdida = sum(b.perdida_corte_m for b in barras_procesadas)
+    tot_retazos = sum(b.longitud_sobrante_m for b in barras_procesadas if b.es_retazo_utilizable)
+    tot_scrap = sum(b.longitud_sobrante_m for b in barras_procesadas if not b.es_retazo_utilizable)
+    tot_lineal_consumido = sum(b.longitud_nominal for b in barras_procesadas)
+    aprov_global = round((tot_util / tot_lineal_consumido * 100.0), 2) if tot_lineal_consumido > 0 else 0.0
+
+    return {
+        "barras": barras_procesadas,
+        "retazos_consumidos": retazos_consumidos_ids,
+        "balance": {
+            "long_comprada_m": round(tot_comprado, 3),
+            "long_util_m": round(tot_util, 3),
+            "perdida_corte_m": round(tot_perdida, 3),
+            "retazos_recuperables_m": round(tot_retazos, 3),
+            "desperdicio_real_m": round(tot_scrap, 3),
+            "rendimiento_global_pct": aprov_global
+        }
+    }
+
+# ==============================================================================
+# 4. CONFIGURACIÓN Y ESTILOS DE LA INTERFAZ STREAMLIT
+# ==============================================================================
 st.set_page_config(
-    page_title="Calculadora de Tubos ASTM A500",
-    page_icon="🏗️",
+    page_title="SteelCalc 1D | Metrados y Optimización",
+    page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 2. Catálogo completo de perfiles Tubo Cuadrado ASTM A500 (68 perfiles)
-CATALOGO_DATOS = [
-    {"selector": "20 x 20 | 0.9 mm", "perfil": "20 x 20", "equiv_pulg": '3/4" x 3/4"', "lado_mm": 20, "espesor_mm": 0.9, "peso_kg_m": 0.49, "peso_6m_ficha": 2.96, "nota": ""},
-    {"selector": "20 x 20 | 1.5 mm", "perfil": "20 x 20", "equiv_pulg": '3/4" x 3/4"', "lado_mm": 20, "espesor_mm": 1.5, "peso_kg_m": 0.86, "peso_6m_ficha": 5.14, "nota": ""},
-    {"selector": "20 x 20 | 2 mm", "perfil": "20 x 20", "equiv_pulg": '3/4" x 3/4"', "lado_mm": 20, "espesor_mm": 2.0, "peso_kg_m": 1.04, "peso_6m_ficha": 6.24, "nota": ""},
-    {"selector": "25 x 25 | 1.5 mm", "perfil": "25 x 25", "equiv_pulg": '1" x 1"', "lado_mm": 25, "espesor_mm": 1.5, "peso_kg_m": 1.06, "peso_6m_ficha": 6.37, "nota": ""},
-    {"selector": "25 x 25 | 2 mm", "perfil": "25 x 25", "equiv_pulg": '1" x 1"', "lado_mm": 25, "espesor_mm": 2.0, "peso_kg_m": 1.46, "peso_6m_ficha": 8.76, "nota": ""},
-    {"selector": "25 x 25 | 2.5 mm", "perfil": "25 x 25", "equiv_pulg": '1" x 1"', "lado_mm": 25, "espesor_mm": 2.5, "peso_kg_m": 1.67, "peso_6m_ficha": 10.02, "nota": ""},
-    {"selector": "25 x 25 | 3 mm", "perfil": "25 x 25", "equiv_pulg": '1" x 1"', "lado_mm": 25, "espesor_mm": 3.0, "peso_kg_m": 1.93, "peso_6m_ficha": 11.58, "nota": ""},
-    {"selector": "30 x 30 | 1.2 mm", "perfil": "30 x 30", "equiv_pulg": '1 1/4" x 1 1/4"', "lado_mm": 30, "espesor_mm": 1.2, "peso_kg_m": 1.04, "peso_6m_ficha": 6.24, "nota": ""},
-    {"selector": "30 x 30 | 1.5 mm", "perfil": "30 x 30", "equiv_pulg": '1 1/4" x 1 1/4"', "lado_mm": 30, "espesor_mm": 1.5, "peso_kg_m": 1.30, "peso_6m_ficha": 7.80, "nota": ""},
-    {"selector": "30 x 30 | 1.8 mm", "perfil": "30 x 30", "equiv_pulg": '1 1/4" x 1 1/4"', "lado_mm": 30, "espesor_mm": 1.8, "peso_kg_m": 1.68, "peso_6m_ficha": 10.08, "nota": ""},
-    {"selector": "30 x 30 | 2 mm", "perfil": "30 x 30", "equiv_pulg": '1 1/4" x 1 1/4"', "lado_mm": 30, "espesor_mm": 2.0, "peso_kg_m": 1.86, "peso_6m_ficha": 11.16, "nota": ""},
-    {"selector": "30 x 30 | 2.5 mm", "perfil": "30 x 30", "equiv_pulg": '1 1/4" x 1 1/4"', "lado_mm": 30, "espesor_mm": 2.5, "peso_kg_m": 2.17, "peso_6m_ficha": 13.02, "nota": ""},
-    {"selector": "40 x 40 | 1.5 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 1.5, "peso_kg_m": 1.77, "peso_6m_ficha": 10.62, "nota": ""},
-    {"selector": "40 x 40 | 1.8 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 1.8, "peso_kg_m": 2.03, "peso_6m_ficha": 12.18, "nota": ""},
-    {"selector": "40 x 40 | 2 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 2.0, "peso_kg_m": 2.24, "peso_6m_ficha": 13.46, "nota": ""},
-    {"selector": "40 x 40 | 2.5 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 2.5, "peso_kg_m": 2.99, "peso_6m_ficha": 17.94, "nota": ""},
-    {"selector": "40 x 40 | 3 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 3.0, "peso_kg_m": 3.54, "peso_6m_ficha": 21.24, "nota": ""},
-    {"selector": "40 x 40 | 4.5 mm", "perfil": "40 x 40", "equiv_pulg": '1 1/2" x 1 1/2"', "lado_mm": 40, "espesor_mm": 4.5, "peso_kg_m": 4.52, "peso_6m_ficha": 27.12, "nota": ""},
-    {"selector": "50 x 50 | 1.2 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 1.2, "peso_kg_m": 1.87, "peso_6m_ficha": 11.24, "nota": ""},
-    {"selector": "50 x 50 | 1.5 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 1.5, "peso_kg_m": 2.25, "peso_6m_ficha": 13.50, "nota": ""},
-    {"selector": "50 x 50 | 1.8 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 1.8, "peso_kg_m": 2.70, "peso_6m_ficha": 16.20, "nota": ""},
-    {"selector": "50 x 50 | 2 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 2.0, "peso_kg_m": 3.12, "peso_6m_ficha": 18.73, "nota": ""},
-    {"selector": "50 x 50 | 2.5 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 2.5, "peso_kg_m": 3.87, "peso_6m_ficha": 23.23, "nota": ""},
-    {"selector": "50 x 50 | 3 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 3.0, "peso_kg_m": 4.49, "peso_6m_ficha": 26.94, "nota": ""},
-    {"selector": "50 x 50 | 4 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 4.0, "peso_kg_m": 6.57, "peso_6m_ficha": 39.41, "nota": "Revisar: valor 4 mm mayor que 4,5 mm"},
-    {"selector": "50 x 50 | 4.5 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 4.5, "peso_kg_m": 6.02, "peso_6m_ficha": 36.12, "nota": ""},
-    {"selector": "50 x 50 | 6 mm", "perfil": "50 x 50", "equiv_pulg": '2" x 2"', "lado_mm": 50, "espesor_mm": 6.0, "peso_kg_m": 8.54, "peso_6m_ficha": 51.21, "nota": ""},
-    {"selector": "60 x 60 | 2 mm", "perfil": "60 x 60", "equiv_pulg": '2 1/2" x 2 1/2"', "lado_mm": 60, "espesor_mm": 2.0, "peso_kg_m": 3.56, "peso_6m_ficha": 21.36, "nota": ""},
-    {"selector": "60 x 60 | 2.5 mm", "perfil": "60 x 60", "equiv_pulg": '2 1/2" x 2 1/2"', "lado_mm": 60, "espesor_mm": 2.5, "peso_kg_m": 4.39, "peso_6m_ficha": 26.34, "nota": ""},
-    {"selector": "60 x 60 | 3 mm", "perfil": "60 x 60", "equiv_pulg": '2 1/2" x 2 1/2"', "lado_mm": 60, "espesor_mm": 3.0, "peso_kg_m": 5.19, "peso_6m_ficha": 31.14, "nota": ""},
-    {"selector": "60 x 60 | 4 mm", "perfil": "60 x 60", "equiv_pulg": '2 1/2" x 2 1/2"', "lado_mm": 60, "espesor_mm": 4.0, "peso_kg_m": 7.14, "peso_6m_ficha": 42.86, "nota": ""},
-    {"selector": "60 x 60 | 4.5 mm", "perfil": "60 x 60", "equiv_pulg": '2 1/2" x 2 1/2"', "lado_mm": 60, "espesor_mm": 4.5, "peso_kg_m": 7.43, "peso_6m_ficha": 44.58, "nota": ""},
-    {"selector": "75 x 75 | 1.5 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 1.5, "peso_kg_m": 3.41, "peso_6m_ficha": 20.43, "nota": ""},
-    {"selector": "75 x 75 | 2 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 2.0, "peso_kg_m": 4.50, "peso_6m_ficha": 27.00, "nota": ""},
-    {"selector": "75 x 75 | 2.5 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 2.5, "peso_kg_m": 5.56, "peso_6m_ficha": 33.36, "nota": ""},
-    {"selector": "75 x 75 | 3 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 3.0, "peso_kg_m": 6.81, "peso_6m_ficha": 40.86, "nota": ""},
-    {"selector": "75 x 75 | 4 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 4.0, "peso_kg_m": 8.59, "peso_6m_ficha": 51.54, "nota": ""},
-    {"selector": "75 x 75 | 4.5 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 4.5, "peso_kg_m": 9.55, "peso_6m_ficha": 57.30, "nota": ""},
-    {"selector": "75 x 75 | 6 mm", "perfil": "75 x 75", "equiv_pulg": '3" x 3"', "lado_mm": 75, "espesor_mm": 6.0, "peso_kg_m": 13.11, "peso_6m_ficha": 78.66, "nota": ""},
-    {"selector": "100 x 100 | 2 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 2.0, "peso_kg_m": 6.17, "peso_6m_ficha": 36.99, "nota": ""},
-    {"selector": "100 x 100 | 2.5 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 2.5, "peso_kg_m": 7.68, "peso_6m_ficha": 46.05, "nota": ""},
-    {"selector": "100 x 100 | 3 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 3.0, "peso_kg_m": 9.20, "peso_6m_ficha": 55.21, "nota": ""},
-    {"selector": "100 x 100 | 4 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 4.0, "peso_kg_m": 12.17, "peso_6m_ficha": 73.03, "nota": ""},
-    {"selector": "100 x 100 | 4.5 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 4.5, "peso_kg_m": 13.59, "peso_6m_ficha": 81.56, "nota": ""},
-    {"selector": "100 x 100 | 6 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 6.0, "peso_kg_m": 16.98, "peso_6m_ficha": 101.88, "nota": ""},
-    {"selector": "100 x 100 | 9.5 mm", "perfil": "100 x 100", "equiv_pulg": '4" x 4"', "lado_mm": 100, "espesor_mm": 9.5, "peso_kg_m": 25.70, "peso_6m_ficha": 154.20, "nota": ""},
-    {"selector": "125 x 125 | 3 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 3.0, "peso_kg_m": 11.31, "peso_6m_ficha": 67.86, "nota": ""},
-    {"selector": "125 x 125 | 4 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 4.0, "peso_kg_m": 14.87, "peso_6m_ficha": 89.22, "nota": ""},
-    {"selector": "125 x 125 | 4.5 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 4.5, "peso_kg_m": 17.17, "peso_6m_ficha": 103.02, "nota": ""},
-    {"selector": "125 x 125 | 4.7 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 4.7, "peso_kg_m": 17.81, "peso_6m_ficha": 106.86, "nota": ""},
-    {"selector": "125 x 125 | 6 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 6.0, "peso_kg_m": 21.69, "peso_6m_ficha": 130.14, "nota": ""},
-    {"selector": "125 x 125 | 6.35 mm", "perfil": "125 x 125", "equiv_pulg": '5" x 5"', "lado_mm": 125, "espesor_mm": 6.35, "peso_kg_m": 23.24, "peso_6m_ficha": 139.44, "nota": ""},
-    {"selector": "150 x 150 | 3 mm", "perfil": "150 x 150", "equiv_pulg": '6" x 6"', "lado_mm": 150, "espesor_mm": 3.0, "peso_kg_m": 13.67, "peso_6m_ficha": 82.02, "nota": ""},
-    {"selector": "150 x 150 | 4 mm", "perfil": "150 x 150", "equiv_pulg": '6" x 6"', "lado_mm": 150, "espesor_mm": 4.0, "peso_kg_m": 18.01, "peso_6m_ficha": 108.06, "nota": ""},
-    {"selector": "150 x 150 | 4.5 mm", "perfil": "150 x 150", "equiv_pulg": '6" x 6"', "lado_mm": 150, "espesor_mm": 4.5, "peso_kg_m": 20.80, "peso_6m_ficha": 124.80, "nota": ""},
-    {"selector": "150 x 150 | 6 mm", "perfil": "150 x 150", "equiv_pulg": '6" x 6"', "lado_mm": 150, "espesor_mm": 6.0, "peso_kg_m": 27.39, "peso_6m_ficha": 164.32, "nota": ""},
-    {"selector": "200 x 200 | 3 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 3.0, "peso_kg_m": 18.63, "peso_6m_ficha": 111.76, "nota": ""},
-    {"selector": "200 x 200 | 4 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 4.0, "peso_kg_m": 24.29, "peso_6m_ficha": 145.74, "nota": ""},
-    {"selector": "200 x 200 | 4.5 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 4.5, "peso_kg_m": 27.77, "peso_6m_ficha": 166.64, "nota": ""},
-    {"selector": "200 x 200 | 4.7 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 4.7, "peso_kg_m": 29.21, "peso_6m_ficha": 175.26, "nota": ""},
-    {"selector": "200 x 200 | 6 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 6.0, "peso_kg_m": 35.82, "peso_6m_ficha": 214.92, "nota": ""},
-    {"selector": "200 x 200 | 8 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 8.0, "peso_kg_m": 48.68, "peso_6m_ficha": 292.10, "nota": ""},
-    {"selector": "200 x 200 | 9 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 9.0, "peso_kg_m": 52.34, "peso_6m_ficha": 314.04, "nota": ""},
-    {"selector": "200 x 200 | 9.5 mm", "perfil": "200 x 200", "equiv_pulg": '8" x 8"', "lado_mm": 200, "espesor_mm": 9.5, "peso_kg_m": 56.08, "peso_6m_ficha": 336.48, "nota": ""},
-    {"selector": "250 x 250 | 4.7 mm", "perfil": "250 x 250", "equiv_pulg": '10" x 10"', "lado_mm": 250, "espesor_mm": 4.7, "peso_kg_m": 36.86, "peso_6m_ficha": 221.14, "nota": ""},
-    {"selector": "250 x 250 | 6 mm", "perfil": "250 x 250", "equiv_pulg": '10" x 10"', "lado_mm": 250, "espesor_mm": 6.0, "peso_kg_m": 45.24, "peso_6m_ficha": 271.44, "nota": ""},
-    {"selector": "300 x 300 | 6 mm", "perfil": "300 x 300", "equiv_pulg": '12" x 12"', "lado_mm": 300, "espesor_mm": 6.0, "peso_kg_m": 54.66, "peso_6m_ficha": 327.96, "nota": ""},
-    {"selector": "300 x 300 | 8 mm", "perfil": "300 x 300", "equiv_pulg": '12" x 12"', "lado_mm": 300, "espesor_mm": 8.0, "peso_kg_m": 73.82, "peso_6m_ficha": 442.90, "nota": ""},
-]
-
-# Enriquecer catálogo con las columnas calculadas de la hoja 'Catálogo'
-for item in CATALOGO_DATOS:
-    item["peso_6m_calc"] = round(item["peso_kg_m"] * 6.0, 2)
-    item["area_m2_m"] = round(4.0 * item["lado_mm"] / 1000.0, 4)
-    item["area_6m_m2"] = round(item["area_m2_m"] * 6.0, 4)
-
-MAPA_PERFILES = {item["selector"]: item for item in CATALOGO_DATOS}
-LISTA_SELECTORES = list(MAPA_PERFILES.keys())
-
-
-# 3. Función de cálculo (fórmulas exactas de la hoja 'Calculadora')
-def calcular_tubos_y_cortes(perfil_info, cantidad_elem, long_elem_m, largo_comercial_m, ancho_corte_mm):
-    kerf_m = ancho_corte_mm / 1000.0
-    peso_kg_m = perfil_info["peso_kg_m"]
-    area_m2_m = perfil_info["area_m2_m"]
-
-    # B17: Metraje requerido (m)
-    metraje_requerido = cantidad_elem * long_elem_m
-
-    # B18 y B19: Tramos completos por elemento y Tramo residual / pieza corta (m)
-    if largo_comercial_m > 0:
-        tramos_completos = int(long_elem_m // largo_comercial_m)
-        tramo_residual = round(long_elem_m % largo_comercial_m, 6)
-        if abs(tramo_residual - largo_comercial_m) < 1e-6:
-            tramo_residual = 0.0
-            tramos_completos += 1
-    else:
-        tramos_completos = 0
-        tramo_residual = 0.0
-
-    # B20: Piezas cortas por barra comercial
-    if tramo_residual == 0:
-        piezas_cortas_por_barra = 0
-    else:
-        denom = tramo_residual + kerf_m
-        piezas_cortas_por_barra = int(math.floor((largo_comercial_m + kerf_m + 1e-9) / denom)) if denom > 0 else 0
-
-    # B21: Barras completas (unidades)
-    barras_completas = tramos_completos * cantidad_elem
-
-    # B22: Barras para tramos cortos (unid.)
-    if piezas_cortas_por_barra == 0:
-        barras_tramos_cortos = 0
-    else:
-        barras_tramos_cortos = math.ceil(cantidad_elem / piezas_cortas_por_barra)
-
-    # B23: Total barras comerciales
-    total_barras = barras_completas + barras_tramos_cortos
-
-    # B24: Cantidad de empalmes
-    if largo_comercial_m > 0:
-        empalmes = cantidad_elem * max(0, math.ceil(long_elem_m / largo_comercial_m) - 1)
-    else:
-        empalmes = 0
-
-    # B25: Cantidad de piezas necesarias
-    piezas_necesarias = cantidad_elem * (tramos_completos + (1 if tramo_residual > 0 else 0))
-
-    # B26: Metraje comprado (m)
-    metraje_comprado = total_barras * largo_comercial_m
-
-    # B27: Pérdida por cortes (m)
-    if barras_tramos_cortos == 0:
-        perdida_cortes = 0.0
-    else:
-        # Pérdida en las primeras (B22 - 1) barras de tramos cortos
-        if (largo_comercial_m - piezas_cortas_por_barra * tramo_residual - piezas_cortas_por_barra * kerf_m) >= -1e-7:
-            perdida_barra_llena = piezas_cortas_por_barra * kerf_m
-        else:
-            perdida_barra_llena = max(0, piezas_cortas_por_barra - 1) * kerf_m
-
-        # Pérdida en la última barra de tramos cortos
-        piezas_ultima_barra = cantidad_elem - (barras_tramos_cortos - 1) * piezas_cortas_por_barra
-        if (largo_comercial_m - piezas_ultima_barra * tramo_residual - piezas_ultima_barra * kerf_m) >= -1e-7:
-            perdida_ultima_barra = piezas_ultima_barra * kerf_m
-        else:
-            perdida_ultima_barra = max(0, piezas_ultima_barra - 1) * kerf_m
-
-        perdida_cortes = (barras_tramos_cortos - 1) * perdida_barra_llena + perdida_ultima_barra
-
-    # B28: Sobrante aprovechable (m)
-    sobrante_aprovechable = metraje_comprado - metraje_requerido - perdida_cortes
-
-    # B29 a B32: Pesos y áreas
-    peso_requerido = metraje_requerido * peso_kg_m
-    peso_comprado = metraje_comprado * peso_kg_m
-    area_requerida = metraje_requerido * area_m2_m
-    area_comprada = metraje_comprado * area_m2_m
-
-    # Nota dinámica D21
-    if tramo_residual == 0:
-        nota_piezas = "No se necesitan piezas cortadas."
-    else:
-        if tramos_completos == 0:
-            nota_piezas = f"Se requieren {cantidad_elem} piezas de {tramo_residual:.2f} m, sin empalmes. Salen hasta {piezas_cortas_por_barra} piezas por barra."
-        else:
-            nota_piezas = f"Se requieren {cantidad_elem} extensiones de {tramo_residual:.2f} m. Salen hasta {piezas_cortas_por_barra} piezas por barra."
-
-    # Texto resumen A35
-    if tramo_residual == 0:
-        texto_plan = f"Usar {barras_completas} barra(s) completa(s); no necesitas empalmes."
-    else:
-        texto_plan = (
-            f"Usar {barras_completas} barra(s) completa(s) de {largo_comercial_m:.2f} m "
-            f"y cortar {cantidad_elem} pieza(s) de {tramo_residual:.2f} m "
-            f"desde {barras_tramos_cortos} barra(s) adicional(es)."
-        )
-
-    # Desglose de barras (Filas 40 en adelante)
-    filas_plan = []
-    # Fila 1: Barras completas
-    filas_plan.append({
-        "N.° barra(s)": f"1 a {barras_completas}" if barras_completas > 0 else "—",
-        "Tipo de uso": "Barras completas" if barras_completas > 0 else "Sin barras completas",
-        "Piezas": barras_completas,
-        "Largo/pieza (m)": round(largo_comercial_m, 2) if barras_completas > 0 else 0.0,
-        "Metraje útil (m)": round(barras_completas * largo_comercial_m, 2),
-        "Pérdida corte (m)": 0.0,
-        "Sobrante (m)": 0.0,
-        "Destino / indicación": "Tramos principales sin corte" if barras_completas > 0 else "No se utilizan tubos enteros"
-    })
-
-    # Filas siguientes: Barras adicionales para cortes
-    for i in range(1, barras_tramos_cortos + 1):
-        num_barra = barras_completas + i
-        tipo_uso = "Piezas cortas" if tramos_completos == 0 else "Extensiones"
-        piezas_en_barra = min(piezas_cortas_por_barra, cantidad_elem - (i - 1) * piezas_cortas_por_barra)
-        largo_pieza = tramo_residual
-        metraje_util = piezas_en_barra * largo_pieza
-
-        if (largo_comercial_m - metraje_util - piezas_en_barra * kerf_m) >= -1e-7:
-            perdida_barra = piezas_en_barra * kerf_m
-        else:
-            perdida_barra = max(0, piezas_en_barra - 1) * kerf_m
-
-        sobrante_barra = max(0.0, largo_comercial_m - metraje_util - perdida_barra)
-
-        filas_plan.append({
-            "N.° barra(s)": str(num_barra),
-            "Tipo de uso": tipo_uso,
-            "Piezas": piezas_en_barra,
-            "Largo/pieza (m)": round(largo_pieza, 2),
-            "Metraje útil (m)": round(metraje_util, 2),
-            "Pérdida corte (m)": round(perdida_barra, 4),
-            "Sobrante (m)": round(sobrante_barra, 2),
-            "Destino / indicación": f"Cortar {piezas_en_barra} pieza(s) de {largo_pieza:.2f} m"
-        })
-
-    return {
-        "metraje_requerido": metraje_requerido,
-        "tramos_completos": tramos_completos,
-        "tramo_residual": tramo_residual,
-        "piezas_cortas_por_barra": piezas_cortas_por_barra,
-        "barras_completas": barras_completas,
-        "barras_tramos_cortos": barras_tramos_cortos,
-        "total_barras": total_barras,
-        "empalmes": empalmes,
-        "piezas_necesarias": piezas_necesarias,
-        "metraje_comprado": metraje_comprado,
-        "perdida_cortes": perdida_cortes,
-        "sobrante_aprovechable": sobrante_aprovechable,
-        "peso_requerido": peso_requerido,
-        "peso_comprado": peso_comprado,
-        "area_requerida": area_requerida,
-        "area_comprada": area_comprada,
-        "nota_piezas": nota_piezas,
-        "texto_plan": texto_plan,
-        "df_plan": pd.DataFrame(filas_plan)
+# Inyección de estilos de ingeniería (encabezados azul oscuro, tablas nítidas)
+st.markdown("""
+<style>
+    .main { background-color: #fcfcfc; }
+    h1, h2, h3 { color: #0b1f3a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .stDataFrame thead tr th {
+        background-color: #0b2545 !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        text-align: center !important;
     }
+    div[data-testid="metric-container"] {
+        background-color: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        padding: 12px 18px;
+        border-radius: 8px;
+        border-left: 6px solid #0b2545;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+# Inicialización de Estados
+if "metrado_partidas" not in st.session_state:
+    st.session_state.metrado_partidas = []
+if "inventario_retazos" not in st.session_state:
+    st.session_state.inventario_retazos = []
+if "optim_resultado" not in st.session_state:
+    st.session_state.optim_resultado = None
+if "catalogos_app" not in st.session_state:
+    st.session_state.catalogos_app = CATALOGO_OFICIAL
 
-# 4. Encabezado principal
-st.title("🏗️ Calculadora de Tubos Cuadrados ASTM A500, Cortes y Empalmes")
-st.markdown("Calcula barras comerciales necesarias al usar tramos completos y cortar extensiones para cada elemento.")
-
-# 5. Barra lateral: Parámetros de Entrada (Celdas amarillas del Excel)
+# ==============================================================================
+# 5. BARRA LATERAL (PARÁMETROS DE CORTE, PROYECTO Y CATÁLOGOS)
+# ==============================================================================
 with st.sidebar:
-    st.header("⚙️ Datos de Entrada")
-
-    idx_default = LISTA_SELECTORES.index("40 x 40 | 2 mm")
-    perfil_seleccionado = st.selectbox(
-        "Perfil / espesor",
-        options=LISTA_SELECTORES,
-        index=idx_default
-    )
-
-    cantidad_elementos = st.number_input(
-        "Cantidad de elementos",
-        min_value=1,
-        value=5,
-        step=1
-    )
-
-    longitud_elemento = st.number_input(
-        "Longitud final por elemento (m)",
-        min_value=0.10,
-        value=9.00,
-        step=0.50,
-        format="%.2f"
-    )
-
-    largo_comercial = st.number_input(
-        "Largo comercial del tubo (m)",
-        min_value=1.00,
-        value=6.00,
-        step=0.50,
-        format="%.2f"
-    )
-
-    ancho_corte_mm = st.number_input(
-        "Ancho de corte / disco (mm)",
-        min_value=0.0,
-        value=0.0,
-        step=0.5,
-        format="%.1f",
-        help="Ancho de corte = 0 mm para reproducir el ejemplo sin pérdida por disco."
-    )
-
-    st.divider()
-    st.subheader("📗 Datos del Catálogo")
-    info_perfil = MAPA_PERFILES[perfil_seleccionado]
-    st.markdown(f"**Equivalencia:** `{info_perfil['equiv_pulg']}`")
-    st.markdown(f"**Lado exterior:** `{info_perfil['lado_mm']} mm`")
-    st.markdown(f"**Espesor:** `{info_perfil['espesor_mm']} mm`")
-    st.markdown(f"**Peso del perfil:** `{info_perfil['peso_kg_m']:.2f} kg/m`")
-    st.markdown(f"**Área exterior:** `{info_perfil['area_m2_m']:.2f} m²/m`")
-    st.markdown(f"**Peso barra 6 m (ficha):** `{info_perfil['peso_6m_ficha']:.2f} kg`")
-
-    if info_perfil["nota"]:
-        st.warning(f"⚠️ {info_perfil['nota']}")
-
-# Avisos especiales de validación
-if perfil_seleccionado == "50 x 50 | 4 mm":
-    st.warning(
-        "**Aviso del catálogo:** en 50 × 50 mm, el peso publicado para 4 mm (6.57 kg/m) supera al de 4.5 mm (6.02 kg/m). "
-        "Confirmar con el proveedor antes de presupuestar ese perfil."
-    )
-
-if tramo_mayor := (
-    round(longitud_elemento % largo_comercial, 6) > 0
-    and int(math.floor((largo_comercial + ancho_corte_mm / 1000.0 + 1e-9) / (round(longitud_elemento % largo_comercial, 6) + ancho_corte_mm / 1000.0))) == 0
-):
-    st.error("El tramo residual más el ancho de corte supera el largo comercial del tubo.")
-
-# 6. Ejecutar cálculos y organizar en pestañas (Calculadora y Catálogo)
-res = calcular_tubos_y_cortes(
-    info_perfil,
-    cantidad_elementos,
-    longitud_elemento,
-    largo_comercial,
-    ancho_corte_mm
-)
-
-tab_calc, tab_cat = st.tabs(["🧮 Calculadora y Despiece", "📒 Catálogo ASTM A500"])
-
-with tab_calc:
-    # Bloque 1: Resumen de Compra
-    st.subheader("📦 Resumen de Compra")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("TUBOS A COMPRAR", f"{res['total_barras']} unid.")
-    col2.metric("SOBRANTE APROVECHABLE", f"{res['sobrante_aprovechable']:.2f} m")
-    col3.metric("EMPALMES TOTALES", f"{res['empalmes']}")
-    col4.metric("PESO COMPRA", f"{res['peso_comprado']:.2f} kg")
-
+    st.image("https://img.icons8.com/fluency/96/steel-i-beam.png", width=64)
+    st.title("SteelCalc Pro")
+    st.caption("Cálculo Estructural, Metrados y Optimización 1D")
     st.divider()
 
-    # Bloque 2: Metrado y Despiece del Perfil
-    col_izq, col_der = st.columns([3, 2])
+    st.subheader("Parámetros de Taller")
+    param_kerf_mm = st.number_input("Espesor Disco de Corte (mm)", value=3.0, min_value=0.5, max_value=10.0, step=0.5)
+    param_despunte_mm = st.number_input("Despunte de Extremos (mm)", value=0.0, min_value=0.0, max_value=50.0, step=5.0)
+    param_min_retazo_m = st.number_input("Longitud Mínima Retazo Reutilizable (m)", value=0.50, min_value=0.10, max_value=3.0, step=0.10)
+    param_costo_kg = st.number_input("Precio Estimado Acero ($/kg)", value=1.50, min_value=0.10, step=0.05)
 
-    with col_izq:
-        st.subheader("📐 Metrado y Despiece del Perfil")
-        df_metrado = pd.DataFrame([
-            {"Concepto": "Metraje requerido (m)", "Valor": f"{res['metraje_requerido']:.2f}"},
-            {"Concepto": "Tramos completos por elemento", "Valor": f"{res['tramos_completos']}"},
-            {"Concepto": "Tramo residual / pieza corta (m)", "Valor": f"{res['tramo_residual']:.2f}"},
-            {"Concepto": "Piezas cortas por barra comercial", "Valor": f"{res['piezas_cortas_por_barra']}"},
-            {"Concepto": "Barras completas (unidades)", "Valor": f"{res['barras_completas']}"},
-            {"Concepto": "Barras para tramos cortos (unid.)", "Valor": f"{res['barras_tramos_cortos']}"},
-            {"Concepto": "Total barras comerciales", "Valor": f"{res['total_barras']}"},
-            {"Concepto": "Cantidad de empalmes", "Valor": f"{res['empalmes']}"},
-            {"Concepto": "Cantidad de piezas necesarias", "Valor": f"{res['piezas_necesarias']}"},
-            {"Concepto": "Metraje comprado (m)", "Valor": f"{res['metraje_comprado']:.2f}"},
-            {"Concepto": "Pérdida por cortes (m)", "Valor": f"{res['perdida_cortes']:.3f}"},
-            {"Concepto": "Sobrante aprovechable (m)", "Valor": f"{res['sobrante_aprovechable']:.2f}"},
-            {"Concepto": "Peso del metraje requerido (kg)", "Valor": f"{res['peso_requerido']:.2f}"},
-            {"Concepto": "Peso del material comprado (kg)", "Valor": f"{res['peso_comprado']:.2f}"},
-            {"Concepto": "Área exterior requerida (m²)", "Valor": f"{res['area_requerida']:.2f}"},
-            {"Concepto": "Área exterior comprada (m²)", "Valor": f"{res['area_comprada']:.2f}"},
-        ])
-        st.dataframe(df_metrado, use_container_width=True, hide_index=True, height=600)
-
-    with col_der:
-        st.subheader("📌 Notas Técnicas y Criterios")
-        st.info(
-            "**PLAN DE CORTE:** usar primero los tubos completos y después cortar las extensiones necesarias en barras adicionales."
-        )
-        st.success(f"**Detalle de extensiones:** {res['nota_piezas']}")
-        st.markdown(
-            """
-            * **Optimización:** Este cálculo evita cortes innecesarios al usar barras completas y extensiones. No optimiza mezclas de distintas longitudes o perfiles.
-            * **Superficie y Soldadura:** El área corresponde solo a la superficie exterior (4 caras). Los empalmes de columnas requieren validación del diseño estructural y del procedimiento de soldadura; esta herramienta calcula cantidades, no verifica resistencia estructural.
-            """
-        )
+    kerf_m = param_kerf_mm / 1000.0
+    despunte_m = param_despunte_mm / 1000.0
 
     st.divider()
-
-    # Bloque 3: Plan de Barras
-    st.subheader("🪚 Plan de Barras: Primero Barras Completas, Luego Cortes para Extensiones")
-    st.markdown(f"**Resumen de ejecución:** {res['texto_plan']}")
-
-    st.dataframe(res["df_plan"], use_container_width=True, hide_index=True)
-
-    # Botón para descargar el plan de corte en CSV
-    csv_plan = res["df_plan"].to_csv(index=False).encode("utf-8-sig")
+    st.subheader("Gestión de Proyectos")
+    proyecto_nombre = st.text_input("Nombre del Proyecto", value="Estructura Metálica Nave Industrial")
+    
+    # Exportación / Importación de Proyecto JSON
+    proj_data = {
+        "proyecto": proyecto_nombre,
+        "partidas": st.session_state.metrado_partidas,
+        "retazos": st.session_state.inventario_retazos
+    }
     st.download_button(
-        label="⬇️ Descargar Plan de Corte (CSV)",
-        data=csv_plan,
-        file_name=f"plan_corte_{perfil_seleccionado.replace(' ', '').replace('|', '_')}.csv",
-        mime="text/csv"
+        "💾 Guardar Proyecto (JSON)",
+        data=json.dumps(proj_data, indent=2),
+        file_name=f"{proyecto_nombre.replace(' ', '_')}.json",
+        mime="application/json",
+        use_container_width=True
     )
 
-with tab_cat:
-    st.subheader("📒 Catálogo Tubo Cuadrado ASTM A500 — Pesos y Área Superficial")
-    st.caption(
-        "Pesos tomados del catálogo técnico. Área calculada sobre las cuatro caras exteriores del perfil; "
-        "no incluye caras interiores ni extremos. El catálogo indica barras de 6 m."
-    )
+    archivo_cargado = st.file_uploader("📂 Abrir Proyecto Existente", type=["json"])
+    if archivo_cargado:
+        try:
+            datos_cargados = json.load(archivo_cargado)
+            st.session_state.metrado_partidas = datos_cargados.get("partidas", [])
+            st.session_state.inventario_retazos = datos_cargados.get("retazos", [])
+            st.success("Proyecto cargado exitosamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error al leer proyecto: {e}")
 
-    df_catalogo = pd.DataFrame(CATALOGO_DATOS).rename(columns={
-        "perfil": "Perfil (mm)",
-        "equiv_pulg": "Equiv. pulg.",
-        "lado_mm": "Lado (mm)",
-        "espesor_mm": "Espesor (mm)",
-        "peso_kg_m": "Peso ficha (kg/m)",
-        "peso_6m_calc": "Peso 6 m calculado (kg)",
-        "area_m2_m": "Área exterior (m²/m)",
-        "area_6m_m2": "Área exterior 6 m (m²)",
-        "peso_6m_ficha": "Peso 6 m ficha (kg)",
-        "nota": "Control del dato",
-        "selector": "Selector de perfil"
-    })
+# ==============================================================================
+# 6. CUERPO PRINCIPAL: PESTAÑAS FUNCIONALES
+# ==============================================================================
+tabs = st.tabs([
+    "📋 Metrado Estructurado",
+    "✂️ Optimización y Plan de Corte",
+    "♻️ Inventario de Retazos",
+    "📊 Reportes Ejecutivos",
+    "📚 Catálogo Técnico"
+])
 
-    columnas_orden = [
-        "Perfil (mm)", "Equiv. pulg.", "Lado (mm)", "Espesor (mm)",
-        "Peso ficha (kg/m)", "Peso 6 m calculado (kg)", "Área exterior (m²/m)",
-        "Área exterior 6 m (m²)", "Peso 6 m ficha (kg)", "Control del dato", "Selector de perfil"
-    ]
-    st.dataframe(df_catalogo[columnas_orden], use_container_width=True, hide_index=True, height=600)
+# ------------------------------------------------------------------------------
+# PESTAÑA 1: METRADO ESTRUCTURADO Y FORMULARIO DE MATERIALES
+# ------------------------------------------------------------------------------
+with tabs[0]:
+    st.header("Metrado Jerárquico de Elementos Metálicos")
+    
+    with st.expander("➕ Formulario de Selección Inteligente de Materiales", expanded=True):
+        f_col1, f_col2, f_col3 = st.columns([1.5, 2, 1.5])
+        
+        with f_col1:
+            partida_codigo = st.text_input("N.º Partida Jerárquica", value=f"01.01.{len(st.session_state.metrado_partidas)+1:02d}")
+            agrupador_nombre = st.text_input("Agrupador / Subpartida", value="01.01 — PERFILES METÁLICOS")
+        
+        with f_col2:
+            familia_opciones = list(st.session_state.catalogos_app.keys())
+            familia_seleccionada = st.selectbox("Familia del Perfil", familia_opciones)
+            
+            perfiles_en_familia = st.session_state.catalogos_app[familia_seleccionada]
+            denominaciones = [p["denominacion"] for p in perfiles_en_familia]
+            perfil_seleccionado_txt = st.selectbox("Perfil Comercial Catálogo", denominaciones)
+            
+            perfil_obj = next(p for p in perfiles_en_familia if p["denominacion"] == perfil_seleccionado_txt)
+
+        with f_col3:
+            long_comerciales_disp = perfil_obj.get("longitudes", [6.0])
+            long_comercial_elegida = st.selectbox("Longitud Comercial (m)", long_comerciales_disp)
+            st.info(f"**Peso Lineal:** {perfil_obj['peso_kg_m']} kg/m\n\n**Norma:** {perfil_obj.get('norma', 'A36')}")
+
+        st.markdown("##### Despiece Requerido")
+        st.caption("Registre múltiples longitudes para consolidar bajo el mismo elemento.")
+        
+        d_col1, d_col2, d_col3 = st.columns([2, 2, 2])
+        with d_col1:
+            long_pieza_req = st.number_input("Longitud a Cortar (m)", min_value=0.10, max_value=long_comercial_elegida, value=2.30, step=0.05)
+        with d_col2:
+            cant_piezas_req = st.number_input("Cantidad de Piezas", min_value=1, value=2, step=1)
+        with d_col3:
+            st.write("")
+            st.write("")
+            btn_agregar = st.button("➕ Insertar al Metrado", use_container_width=True, type="primary")
+
+        if btn_agregar:
+            perimetro_sup = calcular_perimetro_superficial(
+                familia_seleccionada, perfil_obj["A"], perfil_obj.get("B", 0.0), perfil_obj.get("e", 0.0)
+            )
+            peso_unit = round(perfil_obj["peso_kg_m"] * long_pieza_req, 3)
+            peso_tot = round(peso_unit * cant_piezas_req, 3)
+            area_tot = round(perimetro_sup * long_pieza_req * cant_piezas_req, 3)
+
+            nueva_fila = {
+                "id": len(st.session_state.metrado_partidas) + 1,
+                "partida": partida_codigo,
+                "agrupador": agrupador_nombre,
+                "familia": familia_seleccionada,
+                "perfil": perfil_seleccionado_txt,
+                "descripcion": f"{perfil_seleccionado_txt}, L = {long_pieza_req:.2f} m",
+                "longitud_m": long_pieza_req,
+                "und": "UND",
+                "cantidad": cant_piezas_req,
+                "peso_unit_kg": peso_unit,
+                "peso_total_kg": peso_tot,
+                "area_m2": area_tot,
+                "peso_lineal_kg_m": perfil_obj["peso_kg_m"],
+                "perimetro_m": perimetro_sup,
+                "long_comercial_m": long_comercial_elegida
+            }
+            st.session_state.metrado_partidas.append(nueva_fila)
+            st.success("Partida agregada correctamente.")
+            st.rerun()
+
+    # Visualización de la Tabla Principal
+    if st.session_state.metrado_partidas:
+        df_partidas = pd.DataFrame(st.session_state.metrado_partidas)
+        
+        st.subheader("Tabla Principal de Metrados")
+        
+        col_view = df_partidas[[
+            "partida", "descripcion", "peso_unit_kg", "und", "cantidad", "peso_total_kg", "area_m2"
+        ]].rename(columns={
+            "partida": "N.º PARTIDA",
+            "descripcion": "ELEMENTO / DESCRIPCIÓN",
+            "peso_unit_kg": "PESO UNITARIO (KG/UND)",
+            "und": "UND",
+            "cantidad": "CANTIDAD",
+            "peso_total_kg": "PESO TOTAL (KG)",
+            "area_m2": "ÁREA SUPERFICIAL (M²)"
+        })
+        
+        st.dataframe(col_view, use_container_width=True, hide_index=True)
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Peso Neto Fabricación", f"{df_partidas['peso_total_kg'].sum():,.2f} kg")
+        m2.metric("Área Pintura Expuesta", f"{df_partidas['area_m2'].sum():,.2f} m²")
+        m3.metric("Total de Piezas a Cortar", f"{int(df_partidas['cantidad'].sum())} und")
+
+        c_del1, c_del2 = st.columns([5, 1])
+        with c_del2:
+            if st.button("🗑️ Vaciar Tabla"):
+                st.session_state.metrado_partidas = []
+                st.rerun()
+    else:
+        st.info("La tabla principal de metrados está actualmente vacía. Ingrese elementos mediante el formulario superior.")
+
+# ------------------------------------------------------------------------------
+# PESTAÑA 2: OPTIMIZACIÓN INTELIGENTE Y PLAN DE CORTE VISUAL
+# ------------------------------------------------------------------------------
+with tabs[1]:
+    st.header("Optimizador de Corte 1D y Secuencias de Taller")
+    
+    if not st.session_state.metrado_partidas:
+        st.warning("Debe ingresar elementos al metrado para ejecutar la optimización.")
+    else:
+        perfiles_unicos = sorted(list(set(p["perfil"] for p in st.session_state.metrado_partidas)))
+        
+        c_opt1, c_opt2, c_opt3 = st.columns([2, 2, 2])
+        with c_opt1:
+            perfil_objetivo = st.selectbox("Seleccione el Perfil a Optimizar", perfiles_unicos)
+        with c_opt2:
+            modo_optim = st.selectbox("Estrategia", ["Minimizar Desperdicio", "Minimizar Barras", "Optimizar por Costo"])
+        with c_opt3:
+            st.write("")
+            st.write("")
+            btn_ejecutar_opt = st.button("⚡ Ejecutar Optimización", type="primary", use_container_width=True)
+
+        partidas_del_perfil = [p for p in st.session_state.metrado_partidas if p["perfil"] == perfil_objetivo]
+        demandas_corte = [(p["partida"], p["descripcion"], p["longitud_m"], p["cantidad"]) for p in partidas_del_perfil]
+        long_com = [partidas_del_perfil[0]["long_comercial_m"]]
+        
+        retazos_del_perfil = [
+            r for r in st.session_state.inventario_retazos 
+            if r["perfil"] == perfil_objetivo and r["estado"] == "Disponible"
+        ]
+
+        if btn_ejecutar_opt or (st.session_state.optim_resultado and st.session_state.get("perfil_opt_activo") == perfil_objetivo):
+            res_opt = optimizar_1d_cutting_stock(
+                demandas=demandas_corte,
+                longitudes_comerciales=long_com,
+                retazos_inventario=retazos_del_perfil,
+                kerf_m=kerf_m,
+                despunte_m=despunte_m,
+                min_retazo_m=param_min_retazo_m,
+                modo=modo_optim
+            )
+            st.session_state.optim_resultado = res_opt
+            st.session_state.perfil_opt_activo = perfil_objetivo
+            
+            bal = res_opt["balance"]
+            
+            # Métricas del Resultado
+            r1, r2, r3, r4, r5 = st.columns(5)
+            r1.metric("Longitud Comprada", f"{bal['long_comprada_m']} m")
+            r2.metric("Longitud Útil", f"{bal['long_util_m']} m")
+            r3.metric("Rendimiento", f"{bal['rendimiento_global_pct']}%")
+            r4.metric("Retazos Útiles", f"{bal['retazos_recuperables_m']} m")
+            r5.metric("Desperdicio Real", f"{bal['desperdicio_real_m']} m")
+
+            st.markdown("#### Diagrama Visual del Plan de Corte (Proporcional)")
+            
+            # Generación Gráfica con Plotly
+            fig = go.Figure()
+            paleta_colores = ["#1f77b4", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b", "#e377c2", "#17becf"]
+
+            for b_idx, b in enumerate(res_opt["barras"]):
+                eje_y = f"{b.id_barra} ({b.tipo_origen} {b.longitud_nominal}m)"
+                
+                # Graficar piezas útiles
+                for p_idx, p in enumerate(b.piezas):
+                    fig.add_trace(go.Bar(
+                        y=[eje_y],
+                        x=[p.longitud],
+                        name=f"Pieza {p.longitud}m",
+                        orientation='h',
+                        marker=dict(color=paleta_colores[p_idx % len(paleta_colores)]),
+                        text=f"{p.longitud}m",
+                        textposition='inside',
+                        hoverinfo='text',
+                        hovertext=f"Pieza: {p.longitud}m | Partida: {p.id_partida}",
+                        showlegend=False
+                    ))
+                    # Espesor de disco
+                    if kerf_m > 0 and p_idx < len(b.piezas) - 1:
+                        fig.add_trace(go.Bar(
+                            y=[eje_y],
+                            x=[kerf_m],
+                            name="Corte Disco",
+                            orientation='h',
+                            marker=dict(color="#111827"),
+                            hoverinfo='skip',
+                            showlegend=False
+                        ))
+
+                # Graficar remanente (Retazo vs Scrap)
+                if b.longitud_sobrante_m > 0:
+                    c_sobrante = "#f59e0b" if b.es_retazo_utilizable else "#ef4444"
+                    txt_sobrante = f"Retazo: {b.longitud_sobrante_m}m" if b.es_retazo_utilizable else f"Scrap: {b.longitud_sobrante_m}m"
+                    fig.add_trace(go.Bar(
+                        y=[eje_y],
+                        x=[b.longitud_sobrante_m],
+                        name="Sobrante",
+                        orientation='h',
+                        marker=dict(color=c_sobrante),
+                        text=txt_sobrante,
+                        textposition='inside',
+                        hoverinfo='text',
+                        hovertext=f"Sobrante: {b.longitud_sobrante_m}m",
+                        showlegend=False
+                    ))
+
+            fig.update_layout(
+                barmode='stack',
+                height=150 + len(res_opt["barras"]) * 45,
+                margin=dict(l=10, r=10, t=30, b=30),
+                xaxis_title="Longitud Desarrollada (Metros)",
+                yaxis=dict(autorange="reversed")
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Gestión de Retazos Obtenidos
+            if st.button("📥 Registrar Retazos Reutilizables en Almacén"):
+                registrados = 0
+                for b in res_opt["barras"]:
+                    if b.es_retazo_utilizable:
+                        st.session_state.inventario_retazos.append({
+                            "id": len(st.session_state.inventario_retazos) + 1,
+                            "perfil": perfil_objetivo,
+                            "longitud_m": b.longitud_sobrante_m,
+                            "origen": f"{b.id_barra} - {proyecto_nombre}",
+                            "estado": "Disponible"
+                        })
+                        registrados += 1
+                st.success(f"Se registraron {registrados} retazos aprovechables en el inventario.")
+                st.rerun()
+
+# ------------------------------------------------------------------------------
+# PESTAÑA 3: INVENTARIO DE RETAZOS REUTILIZABLES
+# ------------------------------------------------------------------------------
+with tabs[2]:
+    st.header("Gestión y Trazabilidad de Retazos Reutilizables")
+    
+    with st.expander("➕ Registro Manual de Retazo en Almacén"):
+        r_col1, r_col2, r_col3 = st.columns(3)
+        with r_col1:
+            fam_r = st.selectbox("Familia", list(st.session_state.catalogos_app.keys()), key="fam_ret_man")
+            perfiles_r = [p["denominacion"] for p in st.session_state.catalogos_app[fam_r]]
+            perfil_r = st.selectbox("Perfil", perfiles_r, key="perf_ret_man")
+        with r_col2:
+            long_ret = st.number_input("Longitud Disponible (m)", min_value=0.20, max_value=12.0, value=1.80, step=0.05)
+        with r_col3:
+            orig_ret = st.text_input("Proyecto / Partida de Origen", value="Taller Central / Sobrante Obra")
+            st.write("")
+            if st.button("Guardar en Almacén", use_container_width=True):
+                st.session_state.inventario_retazos.append({
+                    "id": len(st.session_state.inventario_retazos) + 1,
+                    "perfil": perfil_r,
+                    "longitud_m": long_ret,
+                    "origen": orig_ret,
+                    "estado": "Disponible"
+                })
+                st.success("Retazo ingresado.")
+                st.rerun()
+
+    if st.session_state.inventario_retazos:
+        df_retazos = pd.DataFrame(st.session_state.inventario_retazos)
+        st.dataframe(df_retazos, use_container_width=True, hide_index=True)
+        if st.button("Limpiar Almacén de Retazos"):
+            st.session_state.inventario_retazos = []
+            st.rerun()
+    else:
+        st.info("No hay retazos registrados en el almacén.")
+
+# ------------------------------------------------------------------------------
+# PESTAÑA 4: REPORTES EJECUTIVOS Y LISTAS DE COMPRA
+# ------------------------------------------------------------------------------
+with tabs[3]:
+    st.header("Informes Técnicos y Presupuesto Consolidado")
+    
+    if st.session_state.metrado_partidas:
+        df_base = pd.DataFrame(st.session_state.metrado_partidas)
+        
+        # Reporte de Materiales / Compra Agrupada
+        rep_compra = df_base.groupby(["familia", "perfil", "long_comercial_m"]).agg(
+            longitud_util_total=("longitud_m", lambda x: sum(x * df_base.loc[x.index, "cantidad"])),
+            peso_lineal=("peso_lineal_kg_m", "first"),
+            area_total=("area_m2", "sum")
+        ).reset_index()
+
+        rep_compra["barras_comerciales_estimadas"] = np.ceil(rep_compra["longitud_util_total"] / rep_compra["long_comercial_m"]).astype(int)
+        rep_compra["peso_bruto_compra_kg"] = round(rep_compra["barras_comerciales_estimadas"] * rep_compra["long_comercial_m"] * rep_compra["peso_lineal"], 2)
+        rep_compra["costo_estimado_$"] = round(rep_compra["peso_bruto_compra_kg"] * param_costo_kg, 2)
+
+        st.subheader("REPORTE B: Lista de Compra de Materiales Consolidada")
+        st.dataframe(rep_compra.rename(columns={
+            "familia": "FAMILIA",
+            "perfil": "PERFIL TÉCNICO",
+            "long_comercial_m": "LONG. COMERCIAL (M)",
+            "longitud_util_total": "LONG. ÚTIL (M)",
+            "peso_lineal": "PESO (KG/M)",
+            "area_total": "ÁREA SUP. (M²)",
+            "barras_comerciales_estimadas": "BARRAS REQUERIDAS",
+            "peso_bruto_compra_kg": "PESO BRUTO (KG)",
+            "costo_estimado_$": "PRESUPUESTO ($)"
+        }), use_container_width=True, hide_index=True)
+
+        col_tot1, col_tot2, col_tot3 = st.columns(3)
+        col_tot1.metric("Peso Neto de Fabricación", f"{df_base['peso_total_kg'].sum():,.2f} kg")
+        col_tot2.metric("Peso Bruto Comercial", f"{rep_compra['peso_bruto_compra_kg'].sum():,.2f} kg")
+        col_tot3.metric("Presupuesto Estimado", f"$ {rep_compra['costo_estimado_$'].sum():,.2f}")
+
+        # Generador de Excel descargable
+        buffer_excel = io.BytesIO()
+        with pd.ExcelWriter(buffer_excel, engine="openpyxl") as writer:
+            df_base.to_excel(writer, sheet_name="Metrado_General", index=False)
+            rep_compra.to_excel(writer, sheet_name="Lista_Compra", index=False)
+        
+        st.download_button(
+            "📊 Descargar Reporte Completo en Excel (.xlsx)",
+            data=buffer_excel.getvalue(),
+            file_name=f"Reporte_Estructuras_{proyecto_nombre.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
+        )
+    else:
+        st.info("Registre partidas en el metrado para generar los balances ejecutivos.")
+
+# ------------------------------------------------------------------------------
+# PESTAÑA 5: CONSULTA DIRECTA DE CATÁLOGOS TÉCNICOS
+# ------------------------------------------------------------------------------
+with tabs[4]:
+    st.header("Biblioteca de Catálogos Homologados")
+    st.caption("Propiedades geométricas, pesos y normas oficiales verificadas contra los PDF proporcionados.")
+    
+    fam_sel_cat = st.selectbox("Seleccione Familia a Consultar", list(st.session_state.catalogos_app.keys()))
+    df_cat_view = pd.DataFrame(st.session_state.catalogos_app[fam_sel_cat])
+    st.dataframe(df_cat_view, use_container_width=True, hide_index=True)
